@@ -30,7 +30,7 @@ namespace Nomnom.UnityProjectPatcher.AssetRipper {
         public IReadOnlyList<string> FoldersToExcludeFromRead => _foldersToExcludeFromRead.Select(x => x.Replace('/', '\\')).ToList();
         public IReadOnlyList<string> ProjectSettingFilesToCopy => _projectSettingFilesToCopy.Select(x => x.Replace('/', '\\')).ToList();
         
-        const string defaultBuildUrl = "https://github.com/Zaggy1024/AssetRipper/releases/download/1.3.4-cmd/Release.zip";
+        const string defaultBuildUrl = "https://github.com/Zaggy1024/AssetRipper/releases/download/1.3.9-cmd-save-dlls/Release.zip";
         public string BuildUrl => string.IsNullOrWhiteSpace(_customBuildUrl) ? defaultBuildUrl : _customBuildUrl;
         
         // public bool NeedsManualRip => _configurationData.Processing.enableStaticMeshSeparation;
@@ -282,6 +282,10 @@ namespace Nomnom.UnityProjectPatcher.AssetRipper {
         [JsonProperty("ScriptExportMode")]
         [Tooltip("Decompiled: Use the ILSpy decompiler to generate CS scripts. This is reliable. However, it's also time-consuming and contains many compile errors.\n\nHybrid: Special assemblies, such as Assembly-CSharp, are decompiled to CS scripts with the ILSpy decompiler. Other assemblies are saved as DLL files.\n\nDllExportWithRenaming: Special assemblies, such as Assembly-CSharp, are renamed to have compatible names.\n\nDllExportWithoutRenaming: Export assemblies in their compiled Dll form. Experimental. Might not work at all.")]
         public ScriptExportMode scriptExportMode;
+
+        [JsonProperty("AssembliesToSaveAsDlls")]
+        [Tooltip("Assembly names that should be saved as DLLs rather than decompiled. These assemblies must be copied into the project as plugins.")]
+        public string[] assembliesToSaveAsDlls;
 
         [JsonProperty("ScriptLanguageVersion")]
         [DefaultValue(ScriptLanguageVersion.AutoSafe)]
