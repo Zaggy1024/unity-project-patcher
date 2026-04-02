@@ -279,7 +279,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
         [MenuItem("Tools/Unity Project Patcher/Other/Scrub/Disk")]
         public static void TestScrubDiskFolder() {
             var arSettings = PatcherUtility.GetAssetRipperSettings();
-            var catalogue = ScrubDiskFolder(Application.dataPath, arSettings.FoldersToExcludeFromRead);
+            var catalogue = ScrubDiskFolder(Path.GetFullPath(Path.Combine(Application.dataPath, "..")), Application.dataPath, arSettings.FoldersToExcludeFromRead);
             Debug.Log(catalogue);
             
             var outputPath = Path.Combine(Application.dataPath, "scrub.disk.txt");
@@ -294,7 +294,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             
             var arSettings = PatcherUtility.GetAssetRipperSettings();
             var stopWatch = Stopwatch.StartNew();
-            var catalogue = ScrubDiskFolder(disk, arSettings.FoldersToExcludeFromRead);
+            var catalogue = ScrubDiskFolder(Path.GetFullPath(Path.Combine(Application.dataPath, "..")), disk, arSettings.FoldersToExcludeFromRead);
             Debug.Log($"{stopWatch.ElapsedMilliseconds}ms ({stopWatch.Elapsed.TotalSeconds}sec)");
             Debug.Log(catalogue);
             
@@ -322,7 +322,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             if (string.IsNullOrEmpty(disk)) return;
             
             var arSettings = PatcherUtility.GetAssetRipperSettings();
-            var diskCatalogue = ScrubDiskFolder(disk, arSettings.FoldersToExcludeFromRead);
+            var diskCatalogue = ScrubDiskFolder(Path.GetFullPath(Path.Combine(Application.dataPath, "..")), disk, arSettings.FoldersToExcludeFromRead);
             var projectCatalogue = ScrubProject();
             
             Debug.Log(diskCatalogue.ToString(false));
@@ -429,7 +429,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                     try {
                         AssetScrubber.ReplaceMetaGuid(tempDirectory, entryFrom, entryTo.Guid);
                         AssetScrubber.ReplaceAssetGuids(settings, tempDirectory, entryFrom, allEntryMatches);
-                        // AssetScrubber.ReplaceFileIds(arAssets.RootAssetsPath, entryFrom, matches);
+                        // AssetScrubber.ReplaceFileIds(arAssets.RootPath, entryFrom, matches);
                     } catch (Exception e) {
                         Debug.LogError(e);
                     }
@@ -445,7 +445,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
 
                     try {
                         AssetScrubber.ReplaceAssetGuids(settings, tempDirectory, entry, allEntryMatches);
-                        // AssetScrubber.ReplaceFileIds(arAssets.RootAssetsPath, entry, matches);
+                        // AssetScrubber.ReplaceFileIds(arAssets.RootPath, entry, matches);
                     } catch (Exception e) {
                         Debug.LogError(e);
                     }
@@ -574,7 +574,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                     try {
                         AssetScrubber.ReplaceMetaGuid(tempDirectory, entryFrom, entryTo.Guid);
                         AssetScrubber.ReplaceAssetGuids(settings, tempDirectory, entryFrom, allEntryMatches);
-                        // AssetScrubber.ReplaceFileIds(arAssets.RootAssetsPath, entryFrom, matches);
+                        // AssetScrubber.ReplaceFileIds(arAssets.RootPath, entryFrom, matches);
                     } catch (Exception e) {
                         Debug.LogError(e);
                     }
@@ -590,7 +590,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
 
                     try {
                         AssetScrubber.ReplaceAssetGuids(settings, tempDirectory, entry, allEntryMatches);
-                        // AssetScrubber.ReplaceFileIds(arAssets.RootAssetsPath, entry, matches);
+                        // AssetScrubber.ReplaceFileIds(arAssets.RootPath, entry, matches);
                     } catch (Exception e) {
                         Debug.LogError(e);
                     }
@@ -632,7 +632,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                         continue;
                     }
                     
-                    var toPath = Path.Combine(Path.GetFullPath(project2Catalogue.RootAssetsPath), entryTo.RelativePathToRoot).ToOSPath();
+                    var toPath = Path.Combine(Path.GetFullPath(project2Catalogue.RootPath), entryTo.RelativePathToRoot).ToOSPath();
                     
                     if (EditorUtility.DisplayCancelableProgressBar($"Copying [{i}/{matches.Length}]", $"Copying {entryFrom.RelativePathToRoot}", i / (float)matches.Length)) {
                         throw new OperationCanceledException();
@@ -709,7 +709,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
 
                 foreach (var entry in toDelete) {
                     // if (usedEntries.Contains(entry)) continue;
-                    var toPath = Path.Combine(Path.GetFullPath(project2Catalogue.RootAssetsPath), entry.RelativePathToRoot).ToOSPath();
+                    var toPath = Path.Combine(Path.GetFullPath(project2Catalogue.RootPath), entry.RelativePathToRoot).ToOSPath();
                     try {
                         File.Delete(toPath);
                         Debug.Log($"Deleted \"{toPath}\"");
@@ -972,7 +972,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             
             Debug.Log($"Scrubbing project took {stopWatch.ElapsedMilliseconds}ms ({stopWatch.ElapsedMilliseconds/1000}sec)");
 
-            return new AssetCatalogue(Application.dataPath, entries);
+            return new AssetCatalogue(Path.GetFullPath(Path.Combine(Application.dataPath, "..")), entries);
         }
         
         private static IEnumerable<Assembly> GetProjectAssemblies() {
@@ -1094,17 +1094,19 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             }
         }
 
-        public static AssetCatalogue ScrubDiskFolder(string folderPath, IEnumerable<string> foldersToExclude) {
+        public static AssetCatalogue ScrubDiskFolder(string rootPath, string folderPath, IEnumerable<string> foldersToExclude) {
             var stopWatch = Stopwatch.StartNew();
             EditorUtility.DisplayProgressBar("Scrubbing Folder", $"Scrubbing {folderPath}", 0);
-            
-            var files = Directory.GetFiles(folderPath, "*", SearchOption.AllDirectories)
+
+            var files = Directory.EnumerateFiles(folderPath, "*", SearchOption.AllDirectories)
                 .Where(x => Path.GetExtension(x) != ".meta" && !IgnoreEndsWith.Any(x.EndsWith))
                 .Where(File.Exists)
-                .Select(x => (file: x, relativeFile: x.Substring(folderPath.Length + 1)))
-                .Where(x => {
+                .Select(x => (file: x, relativeFile: Path.GetRelativePath(rootPath, x)))
+                .Where(x =>
+                {
                     var relativeFile = x.relativeFile;
-                    if (foldersToExclude.Any(y => relativeFile.StartsWith(y))) {
+                    var relativeToAssets = Path.GetRelativePath("Assets/", relativeFile);
+                    if (foldersToExclude.Any(y => relativeToAssets.StartsWith(y))) {
                         return false;
                     }
 
@@ -1115,7 +1117,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                     return true;
                 })
                 .ToArray();
-            
+
             EditorUtility.DisplayProgressBar($"Scrubbing {files.Length} files from disk", $"Grabbing entries... this will take a while!", 0);
 
             var entries = new ConcurrentBag<AssetCatalogue.Entry>();
@@ -1128,56 +1130,52 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                 switch (extension) {
                     case ".cs": {
                         //! I hate this :)
-                        // if (rootFolder != "Scripts") continue;
-                        var typeName = PatcherUtility.GetPathWithoutRoot(relativeFile);
-                    
-                        // take first folder
-                        var assemblyName = typeName.Substring(0, typeName.IndexOf('\\'));
-                        // if (foldersToExclude.Contains(assemblyName)) continue;
-                    
-                        // trim first folder
-                        var fullTypeName = typeName.Substring(assemblyName.Length + 1);
-                        // trim extension
+                        var scriptsPath = Path.Combine("Assets", "Scripts") + Path.DirectorySeparatorChar;
+                        if (!relativeFile.StartsWith(scriptsPath)) break;
+                        var pathInAssembly = relativeFile.Substring(scriptsPath.Length);
+
+                        var assemblyName = pathInAssembly.Substring(0, pathInAssembly.IndexOf(Path.DirectorySeparatorChar));
+
+                        var fullTypeName = pathInAssembly.Substring(assemblyName.Length + 1);
                         fullTypeName = fullTypeName.Substring(0, fullTypeName.LastIndexOf('.'));
-                        // make a type path
-                        fullTypeName = fullTypeName.Replace('\\', '.');
-                        
+                        fullTypeName = fullTypeName.Replace(Path.DirectorySeparatorChar, '.');
+
                         var contents = PatcherUtility.ReadAllText(file);
                         var foundNamespace = GetNamespace(contents);
                         foreach (var e in GetDefinitions(contents, "class").Concat(GetDefinitions(contents, "struct")).Take(1)) {
                             fullTypeName = $"{foundNamespace}.{e}";
                         }
-                        
+
                         var associatedGuids = GetAssociatedGuids(relativeFile, file, null).ToArray();
                         var associatedFileIds = GetFileIdsFromDisk(file).ToArray();
                         entries.Add(new AssetCatalogue.ScriptEntry(relativeFile, guid, null, fullTypeName, assemblyName, Array.Empty<AssetCatalogue.ScriptEntry>(), associatedGuids, associatedFileIds, null));
                     }
-                        break;
+                        return;
                     case ".shader": {
                         var shaderType = GetShaderName(file, null);
                         // var associatedGuids = GetAssociatedGuids(relativeFile, file, null).ToArray();
                         // var associatedFileIds = GetFileIdsFromDisk(file).ToArray();
                         entries.Add(new AssetCatalogue.ShaderEntry(relativeFile, guid, null, shaderType, null, null));
                     }
-                        break;
-                    case ".dll" when relativeFile.StartsWith("Plugins\\") || relativeFile.StartsWith("Plugins/"): {
+                        return;
+                    case ".dll" when Path.GetDirectoryName(relativeFile) == Path.Combine("Assets", "Plugins"): {
                         var assemblyName = Path.GetFileNameWithoutExtension(relativeFile);
                         entries.Add(new AssetCatalogue.AssemblyEntry(relativeFile, guid, null, assemblyName, null, null));
                     }
-                        break;
-                    default: {
-                        if (IgnoreFileExtensionsForAssetAssociations.Contains(Path.GetExtension(file))) {
-                            entries.Add(new AssetCatalogue.Entry(null, relativeFile, guid, null, null, null));
-                        } else {
-                            var associatedGuids = GetAssociatedGuids(relativeFile, file, null).ToArray();
-                            var associatedFileIds = GetFileIdsFromDisk(file).ToArray();
-                            entries.Add(new AssetCatalogue.Entry(null, relativeFile, guid, null, associatedGuids, associatedFileIds));
-                        }
-                    }
+                        return;
+                    default:
                         break;
                 }
+
+                if (IgnoreFileExtensionsForAssetAssociations.Contains(Path.GetExtension(file))) {
+                    entries.Add(new AssetCatalogue.Entry(null, relativeFile, guid, null, null, null));
+                } else {
+                    var associatedGuids = GetAssociatedGuids(relativeFile, file, null).ToArray();
+                    var associatedFileIds = GetFileIdsFromDisk(file).ToArray();
+                    entries.Add(new AssetCatalogue.Entry(null, relativeFile, guid, null, associatedGuids, associatedFileIds));
+                }
             });
-            
+
             while (!each.IsCompleted) { }
 
             // var index = -1;
@@ -1206,7 +1204,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             Debug.Log($"Scrubbing disk took {stopWatch.Elapsed.Seconds} seconds");
             stopWatch.Stop();
 
-            return new AssetCatalogue(folderPath, entries);
+            return new AssetCatalogue(rootPath, entries);
         }
 
         public static void ScrubDiskAddressables(string folderPath, IEnumerable<string> foldersToExclude) {
@@ -1674,28 +1672,30 @@ namespace Nomnom.UnityProjectPatcher.Editor {
         //     projectGameAssetsPath = projectGameAssetsPath.Replace('/', Path.DirectorySeparatorChar);
         //     return projectGameAssetsPath;
         // }
-        
-        public static string GetProjectPathFromExportPath(AssetCatalogue.Entry entry, UPPatcherSettings settings, AssetRipperSettings arSettings, bool ignoreExclude) {
-            return GetProjectPathFromExportPath(settings.ProjectGameAssetsPath, entry, settings, arSettings, ignoreExclude);
-        }
-        
+
         public static string GetProjectPathFromExportPath(string projectGameAssetsPath, AssetCatalogue.Entry entry, UPPatcherSettings settings, AssetRipperSettings arSettings, bool ignoreExclude) {
             var splitPath = entry.RelativePathToRoot.Split(Path.DirectorySeparatorChar);
-            var sourceName = splitPath[0];
+
+            // Assets should go to the [Game]/Assets/ directory. Any others can be assumed to
+            // belong in the root.
+            if (splitPath[0] != "Assets") {
+                var restOfPath = string.Join(Path.DirectorySeparatorChar.ToString(), splitPath.Skip(1));
+                return Path.Combine("ProjectSettings", restOfPath);
+            }
+
+            var sourceName = splitPath[1];
             if (!arSettings.TryGetFolderMappingFromSource(sourceName, out var folder, out var exclude, Path.Combine("Unknown", sourceName))) {
                 Debug.LogWarning($"Could not find folder mapping for \"{sourceName}\"");
                 return null;
             }
-            
-            // Debug.Log($" - {sourceName} -> {folder}");
 
             if (!ignoreExclude && exclude) {
                 Debug.LogWarning($"Skipping {sourceName}");
                 return null;
             }
-            
-            var restOfPath = string.Join(Path.DirectorySeparatorChar.ToString(), splitPath.Skip(1));
-            return Path.Combine(projectGameAssetsPath, folder, restOfPath);
+
+            var restOfAssetPath = string.Join(Path.DirectorySeparatorChar.ToString(), splitPath.Skip(2));
+            return Path.Combine(projectGameAssetsPath, folder, restOfAssetPath);
         }
 
         public static string GetExportPathFromProjectPath(string projectAssetPath, UPPatcherSettings settings, AssetRipperSettings arSettings) {
@@ -1713,7 +1713,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                 // exclude = found.Value.exclude;
             }
 
-            var exportPath = Path.Combine(arSettings.OutputExportAssetsFolderPath, folder, Path.GetFileName(projectAssetPath));
+            var exportPath = Path.Combine(arSettings.OutputExportFolderPath, "Assets", folder, Path.GetFileName(projectAssetPath));
             return exportPath;
         }
 

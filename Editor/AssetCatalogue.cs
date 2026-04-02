@@ -19,7 +19,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             TypeNameHandling = TypeNameHandling.All,
         };
         
-        public readonly string RootAssetsPath;
+        public readonly string RootPath;
         public Entry[] Entries;
         
         public static AssetCatalogue FromDisk(string path) {
@@ -30,13 +30,13 @@ namespace Nomnom.UnityProjectPatcher.Editor {
         [JsonConstructor]
         private AssetCatalogue() {}
 
-        public AssetCatalogue(string rootAssetsPath, Entry[] entries) {
-            RootAssetsPath = rootAssetsPath;
+        public AssetCatalogue(string rootPath, Entry[] entries) {
+            RootPath = rootPath;
             Entries = entries;
         }
 
-        public AssetCatalogue(string rootAssetsPath, IEnumerable<Entry> entries) {
-            RootAssetsPath = rootAssetsPath;
+        public AssetCatalogue(string rootPath, IEnumerable<Entry> entries) {
+            RootPath = rootPath;
             Entries = entries.ToArray();
         }
 
@@ -77,11 +77,10 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                 // this becomes the path in the disk folder
                 var rawPath = a.FullTypeName?.Replace('.', Path.DirectorySeparatorChar);
                 rawPath = Path.Combine("Assets", "Scripts", a.AssemblyName ?? string.Empty, $"{rawPath}.cs");
-                
+
                 foreach (var b in scriptEntriesDisk) {
-                    var bPath = Path.Combine("Assets", b.RelativePathToRoot);
-                    if (rawPath != bPath) continue;
-                    
+                    if (rawPath != b.RelativePathToRoot) continue;
+
                     found.Add(new FoundMatch(b, a));
                     break;
                 }
@@ -168,7 +167,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             var projectGameAssetsPath = settings.ProjectGameAssetsPath;
 
             var assetEntriesProjectGroups = assetEntriesProject.GroupBy(x => Path.GetExtension(x.RelativePathToRoot))
-                .ToDictionary(x => x.Key, x => x.GroupBy(y => y.RelativePathToRoot).ToDictionary(y => Path.Combine("Assets", y.Key).ToOSPath(), y => y.First()));
+                .ToDictionary(x => x.Key, x => x.GroupBy(y => y.RelativePathToRoot).ToDictionary(y => y.Key.ToOSPath(), y => y.First()));
             var assetEntriesDiskGroups = assetEntriesDisk.GroupBy(x => Path.GetExtension(x.RelativePathToRoot))
                 .ToDictionary(x => x.Key, x => x.GroupBy(y => y.RelativePathToRoot).ToDictionary(y => y.Key.ToOSPath(), y => y.First()));
 
@@ -450,7 +449,7 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             var sb = new System.Text.StringBuilder();
             if (withTags) {
                 sb.AppendLine($"AssetCatalogue of {Entries.Length} entries <i>(click for details)</i>");
-                sb.AppendLine($"<b>\"Assets\" root</b>: {RootAssetsPath}");
+                sb.AppendLine($"<b>\"Assets\" root</b>: {RootPath}");
             } else {
                 sb.AppendLine($"AssetCatalogue of {Entries.Length} entries (click for details)");
                 sb.AppendLine($"\"Assets\" root");
@@ -531,10 +530,6 @@ namespace Nomnom.UnityProjectPatcher.Editor {
 
             public Entry(string assetType, string relativePathToRoot, string guid, long? fileId, string[] associatedGuids, string[] fileIds) {
                 AssetType = assetType;
-                if (relativePathToRoot.StartsWith("Assets")) {
-                    relativePathToRoot = relativePathToRoot.Substring("Assets".Length + 1);
-                }
-                
                 RelativePathToRoot = relativePathToRoot;
                 Guid = guid;
                 FileId = fileId;

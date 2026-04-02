@@ -29,12 +29,19 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
             Directory.CreateDirectory(gameFolderPath);
             
             // copy the export into the proper folders
-            var arAssets = GuidRemapperStep.AssetRipperCatalogue ?? AssetScrubber.ScrubDiskFolder(arSettings.OutputExportAssetsFolderPath, arSettings.FoldersToExcludeFromRead);
-            var projectAssets = GuidRemapperStep.ProjectCatalogue ?? AssetScrubber.ScrubProject();
+            var arCatalogue = GuidRemapperStep.AssetRipperCatalogue;
+            if (arCatalogue == null)
+            {
+                arCatalogue = AssetScrubber.ScrubDiskFolder(arSettings.OutputExportFolderPath, arSettings.OutputExportAssetsFolderPath, arSettings.FoldersToExcludeFromRead);
+                var arProjectSettingsCatalogue = AssetScrubber.ScrubDiskFolder(arSettings.OutputExportFolderPath, arSettings.OutputExportProjectSettingsFolderPath, arSettings.FoldersToExcludeFromRead);
+                arCatalogue.InsertFrom(arProjectSettingsCatalogue);
+            }
+
+            var projectCatalogue = GuidRemapperStep.ProjectCatalogue ?? AssetScrubber.ScrubProject();
 
             var projectGameAssetsPath = settings.ProjectGameAssetsPath;
             
-            var allowedEntries = GetAllowedEntries(arAssets, projectAssets, arSettings).ToArray();
+            var allowedEntries = GetAllowedEntries(arCatalogue, projectCatalogue, arSettings).ToArray();
             AssetDatabase.StartAssetEditing();
             for (var i = 0; i < allowedEntries.Length; i++) {
                 var asset = allowedEntries[i];
@@ -51,7 +58,7 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
                     }
 
                     Directory.CreateDirectory(Path.GetDirectoryName(projectPath));
-                    var exportPath = Path.Combine(arAssets.RootAssetsPath, asset.RelativePathToRoot);
+                    var exportPath = Path.Combine(arCatalogue.RootPath, asset.RelativePathToRoot);
                     File.Copy(exportPath, projectPath, true);
                     
                     var metaFilePath = $"{exportPath}.meta";
@@ -74,28 +81,33 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
 
         public void OnComplete(bool failed) { }
 
-        private static IEnumerable<AssetCatalogue.Entry> GetAllowedEntries(AssetCatalogue arAssets, AssetCatalogue projectAssets, AssetRipperSettings settings) {
+        private static IEnumerable<AssetCatalogue.Entry> GetAllowedEntries(AssetCatalogue arCatalogue, AssetCatalogue projectCatalogue, AssetRipperSettings settings) {
             var foldersToCopy = settings.FoldersToCopy;
             var filesToExclude = settings.FilesToExcludeFromCopy;
             var filesToExcludePrefix = filesToExclude.Where(x => x.EndsWith("*")).Select(x => x.Substring(0, x.Length - 1)).ToArray();
             filesToExclude = filesToExclude.Except(filesToExcludePrefix).ToList();
             
-            for (int i = 0; i < arAssets.Entries.Length; i++) {
-                var asset = arAssets.Entries[i];
-                
-                EditorUtility.DisplayProgressBar($"Getting allowed entries [{i}/{ arAssets.Entries.Length}]", $"Scrubbing {asset.RelativePathToRoot}", i / (float) arAssets.Entries.Length);
-                
-                if (filesToExclude.Any(x => x == asset.RelativePathToRoot)) continue;
-                if (filesToExcludePrefix.Any(x => asset.RelativePathToRoot.StartsWith(x))) continue;
-                
+            for (int i = 0; i < arCatalogue.Entries.Length; i++) {
+                var asset = arCatalogue.Entries[i];
+
+                EditorUtility.DisplayProgressBar($"Getting allowed entries [{i}/{ arCatalogue.Entries.Length}]", $"Scrubbing {asset.RelativePathToRoot}", i / (float) arCatalogue.Entries.Length);
+
                 var fileName = Path.GetFileName(asset.RelativePathToRoot);
-                if (_ignoreFiles.Any(x => fileName == x)) {
-                    continue;
+
+                var assetsDirectory = "Assets" + Path.DirectorySeparatorChar;
+                if (asset.RelativePathToRoot.StartsWith(assetsDirectory))
+                {
+                    var relativeToAssets = asset.RelativePathToRoot.Substring(assetsDirectory.Length);
+                    if (!foldersToCopy.Any(x => relativeToAssets.StartsWith(x))) continue;
+                    if (filesToExclude.Any(x => x == relativeToAssets)) continue;
+                    if (filesToExcludePrefix.Any(x => relativeToAssets.StartsWith(x))) continue;
+                } else {
+                    var projectSettingsDirectory = "ProjectSettings" + Path.DirectorySeparatorChar;
+                    if (!asset.RelativePathToRoot.StartsWith(projectSettingsDirectory)) continue;
+                    if (!settings.ProjectSettingFilesToCopy.Any(x => x == fileName)) continue;
                 }
-                
-                if (!foldersToCopy.Any(x => asset.RelativePathToRoot.StartsWith(x))) {
-                    continue;
-                }
+
+                if (_ignoreFiles.Any(x => fileName == x)) continue;
                 
                 if (!(asset is AssetCatalogue.ScriptEntry)) {
                     if (asset.RelativePathToRoot.EndsWith(".asmdef")) {
@@ -110,7 +122,7 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
 
                 // var assemblyName = s.AssemblyName;
                 // if (foldersToCopy.All(x => x != assemblyName)) {
-                //     var fullScriptPath = Path.Combine(arAssets.RootAssetsPath, asset.RelativePathToRoot);
+                //     var fullScriptPath = Path.Combine(arCatalogue.RootPath, asset.RelativePathToRoot);
                 //     if (otherFoldersToCopy.All(x => !fullScriptPath.Contains(x))) {
                 //         continue;   
                 //     }
@@ -136,7 +148,7 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
                 //     continue;
                 // }
 
-                if (!projectAssets.ContainsFullTypeName(s)) {
+                if (!projectCatalogue.ContainsFullTypeName(s)) {
                     yield return asset;
                 }
             }

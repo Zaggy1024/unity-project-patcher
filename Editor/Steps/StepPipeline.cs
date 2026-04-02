@@ -19,7 +19,6 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
             new CopyGamePluginsStep(), // recompile
             new CopyExplicitScriptFolderStep(), // restarts
             new EnableUnsafeCodeStep(), // recompiles
-            new CopyProjectSettingsStep(allowUnsafeCode: true), // restart
             new GuidRemapperStep(),
             new CopyAssetRipperExportToProjectStep(), // restarts
             new FixProjectFileIdsStep(),

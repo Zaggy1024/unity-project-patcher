@@ -11,38 +11,21 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
         //! used for the any next steps, before a recompile/restart, but isn't valid past a recompile/restart!
         public static AssetCatalogue AssetRipperCatalogue { get; set; }
         public static AssetCatalogue ProjectCatalogue { get; set; }
-        
-        // [MenuItem("Tools/UPP/Test")]
-        // public static void Foo() {
-        //     var step = new GuidRemapperStep();
-        //
-        //     try {
-        //         var arSettings = step.GetAssetRipperSettings();
-        //     
-        //         var arAssets = AssetScrubber.ScrubDiskFolder(arSettings.OutputExportAssetsFolderPath, arSettings.FoldersToExcludeFromRead);
-        //         var projectAssets = AssetScrubber.ScrubProject();
-        //         
-        //         var matches = projectAssets.CompareProjectToDisk(arAssets);
-        //         foreach (var match in matches) {
-        //             Debug.Log($"\"{match.from.RelativePathToRoot}\" to \"{match.to.RelativePathToRoot}\"\n - {match.from}\n - {match.to}");
-        //         }
-        //     } catch {
-        //         //
-        //     }
-        //     // step.Run();
-        // }
-        
+
         public UniTask<StepResult> Run() {
             var settings = this.GetSettings();
             var arSettings = this.GetAssetRipperSettings();
-            
-            var arAssets = AssetScrubber.ScrubDiskFolder(arSettings.OutputExportAssetsFolderPath, arSettings.FoldersToExcludeFromRead);
-            var projectAssets = AssetScrubber.ScrubProject();
-            
-            AssetRipperCatalogue = arAssets;
-            ProjectCatalogue = projectAssets;
 
-            var matches = projectAssets.CompareProjectToDisk(arAssets).ToArray();
+            var arCatalogue = AssetScrubber.ScrubDiskFolder(arSettings.OutputExportFolderPath, arSettings.OutputExportAssetsFolderPath, arSettings.FoldersToExcludeFromRead);
+            var arProjectSettingsCatalogue = AssetScrubber.ScrubDiskFolder(arSettings.OutputExportFolderPath, arSettings.OutputExportProjectSettingsFolderPath, arSettings.FoldersToExcludeFromRead);
+            arCatalogue.InsertFrom(arProjectSettingsCatalogue);
+
+            var projectCatalogue = AssetScrubber.ScrubProject();
+
+            AssetRipperCatalogue = arCatalogue;
+            ProjectCatalogue = projectCatalogue;
+
+            var matches = projectCatalogue.CompareProjectToDisk(arCatalogue).ToArray();
             Debug.Log($"Found {matches.Length} matches");
             
             // okay so, this needs to take each match, swap to the new guid found
@@ -68,9 +51,9 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
                 
                 // replace guids & write to disk
                 try {
-                    AssetScrubber.ReplaceMetaGuid(arAssets.RootAssetsPath, entryFrom, entryTo.Guid);
-                    AssetScrubber.ReplaceAssetGuids(settings, arAssets.RootAssetsPath, entryFrom, allEntryMatches);
-                    // AssetScrubber.ReplaceFileIds(arAssets.RootAssetsPath, entryFrom, matches);
+                    AssetScrubber.ReplaceMetaGuid(arCatalogue.RootPath, entryFrom, entryTo.Guid);
+                    AssetScrubber.ReplaceAssetGuids(settings, arCatalogue.RootPath, entryFrom, allEntryMatches);
+                    // AssetScrubber.ReplaceFileIds(arCatalogue.RootPath, entryFrom, matches);
                 } catch (Exception e) {
                     Debug.LogError(e);
                 }
@@ -83,23 +66,23 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
             // var filesToExcludePrefix = filesToExclude.Where(x => x.EndsWith("*")).Select(x => x[..^1]).ToArray();
             // filesToExclude = filesToExclude.Except(filesToExcludePrefix).ToList();
             
-            for (int i = 0; i < arAssets.Entries.Length; i++) {
-                var entry = arAssets.Entries[i];
+            for (int i = 0; i < arCatalogue.Entries.Length; i++) {
+                var entry = arCatalogue.Entries[i];
 
-                if (EditorUtility.DisplayCancelableProgressBar($"Guid Remapping [{i}/{arAssets.Entries.Length}]", $"Checking associations for {entry.RelativePathToRoot}", i / (float)arAssets.Entries.Length)) {
+                if (EditorUtility.DisplayCancelableProgressBar($"Guid Remapping [{i}/{arCatalogue.Entries.Length}]", $"Checking associations for {entry.RelativePathToRoot}", i / (float)arCatalogue.Entries.Length)) {
                     Debug.Log("Manually cancelled");
                     throw new OperationCanceledException();
                 }
 
                 try {
-                    AssetScrubber.ReplaceAssetGuids(settings, arAssets.RootAssetsPath, entry, allEntryMatches);
-                    // AssetScrubber.ReplaceFileIds(arAssets.RootAssetsPath, entry, matches);
+                    AssetScrubber.ReplaceAssetGuids(settings, arCatalogue.RootPath, entry, allEntryMatches);
+                    // AssetScrubber.ReplaceFileIds(arCatalogue.RootPath, entry, matches);
                 } catch (Exception e) {
                     Debug.LogError(e);
                 }
             }
             
-            Debug.Log($"guid arAssets entries loop took {stopWatch.ElapsedMilliseconds}ms ({stopWatch.Elapsed.TotalSeconds}sec)");
+            Debug.Log($"guid arCatalogue entries loop took {stopWatch.ElapsedMilliseconds}ms ({stopWatch.Elapsed.TotalSeconds}sec)");
             stopWatch.Stop();
             
             EditorUtility.ClearProgressBar();

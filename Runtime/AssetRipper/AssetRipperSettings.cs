@@ -21,6 +21,7 @@ namespace Nomnom.UnityProjectPatcher.AssetRipper {
         public string ConfigPath => Path.Combine(FolderPath, "AssetRipper.Settings.json");
         public string OutputExportFolderPath => Path.Combine(OutputFolderPath, "ExportedProject");
         public string OutputExportAssetsFolderPath => Path.Combine(OutputExportFolderPath, "Assets");
+        public string OutputExportProjectSettingsFolderPath => Path.Combine(OutputExportFolderPath, "ProjectSettings");
 #endif
 
         public IReadOnlyCollection<FolderMapping> FolderMappings => _folderMappings;
