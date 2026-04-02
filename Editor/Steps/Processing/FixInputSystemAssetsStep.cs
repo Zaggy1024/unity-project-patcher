@@ -12,17 +12,24 @@ using Object = UnityEngine.Object;
 namespace Nomnom.UnityProjectPatcher.Editor.Steps {
     /// <summary>
     /// This converts all InputActionAssets's internal data into its actual format,
-    /// as the ripped data can't be seen in the editor.
+    /// as the ripped data can't be seen in the editor, then assigns any preloaded
+    /// InputActionAsset to the project-wide settings.
     /// </summary>
     public readonly struct FixInputSystemAssetsStep: IPatcherStep {
+        private const string InputSettingsActionsKey = "com.unity.input.settings.actions";
+
         public UniTask<StepResult> Run() {
             var settings = this.GetSettings();
             var arSettings = this.GetAssetRipperSettings();
-            
+
             if (!arSettings.TryGetFolderMapping("MonoBehaviour", out var monoBehaviourFolder, out var exclude) || exclude) {
                 Debug.LogError("Could not find \"MonoBehaviour\" folder mapping");
                 return UniTask.FromResult(StepResult.Failure);
             }
+
+            // Read preloaded asset GUIDs from the exported ProjectSettings.
+            // These GUIDs have been remapped by GuidRemapperStep and match project GUIDs.
+            var preloadedGuids = GetPreloadedAssetGuids(arSettings);
 
             var inputActions = AssetDatabase.FindAssets("t:InputActionAsset", new [] {
                 Path.Combine(settings.ProjectGameAssetsPath, monoBehaviourFolder).ToAssetDatabaseSafePath()
@@ -30,44 +37,67 @@ namespace Nomnom.UnityProjectPatcher.Editor.Steps {
             foreach (var guid in inputActions) {
                 try {
                     var assetPath = AssetDatabase.GUIDToAssetPath(guid);
-                
+
                     // ? need this otherwise unity won't load up all the input data :/
                     var inputActionAssetType = AssetDatabase.GetMainAssetTypeAtPath(assetPath);
-                
+
                     var asset = AssetDatabase.LoadAssetAtPath(assetPath, inputActionAssetType);
                     var clone = Object.Instantiate(asset);
                     var realPath = Path.GetFullPath(assetPath);
                     var text = File.ReadAllText(realPath.ToValidPath());
                     if (!text.Trim().StartsWith("%YAML")) continue;
-                
+
                     clone.name = $"{Path.GetFileNameWithoutExtension(realPath)}";
 
                     var json = Fix(clone);
                     var newPath = Path.Combine(Path.GetDirectoryName(realPath), $"{Path.GetFileNameWithoutExtension(realPath)}.inputactions");
                     File.WriteAllText(newPath.ToValidPath(), json);
-                    
+
                     AssetDatabase.Refresh();
-                    
+
 #if UNITY_2020_3_OR_NEWER
                     var localNewPath = Path.GetRelativePath(Path.Combine(Application.dataPath, ".."), newPath);
 #else
                     var localNewPath = PathNetCore.GetRelativePath(Path.Combine(Application.dataPath, ".."), newPath);
 #endif
 
-                    var newGuid = AssetDatabase.AssetPathToGUID(localNewPath);
                     var newObj = AssetDatabase.LoadAssetAtPath(localNewPath, inputActionAssetType);
-                    
-                    // todo: map previously created action maps to new guid
-                    //? maybe just overwrite the original tbh
+
+                    // If this input action asset was in the game's preloaded assets,
+                    // assign it as the project-wide InputSystem actions asset.
+                    if (preloadedGuids.Contains(guid)) {
+                        Debug.Log($"Assigning \"{clone.name}\" as project-wide InputSystem actions asset");
+                        EditorBuildSettings.AddConfigObject(InputSettingsActionsKey, newObj, false);
+                    }
                 } catch (Exception e) {
                     Debug.LogError(e);
                 }
             }
-            
+
             return UniTask.FromResult(StepResult.Success);
         }
 
         public void OnComplete(bool failed) { }
+
+        private static System.Collections.Generic.HashSet<string> GetPreloadedAssetGuids(Nomnom.UnityProjectPatcher.AssetRipper.AssetRipperSettings arSettings) {
+            var guids = new System.Collections.Generic.HashSet<string>();
+            var projectSettingsPath = Path.Combine(arSettings.OutputExportFolderPath, "ProjectSettings", "ProjectSettings.asset");
+            if (!File.Exists(projectSettingsPath)) {
+                Debug.LogWarning($"Could not find exported ProjectSettings.asset at {projectSettingsPath}");
+                return guids;
+            }
+
+            var text = File.ReadAllText(projectSettingsPath);
+            var sectionMatch = Regex.Match(text, @"preloadedAssets:(.*?)(?=\n  \w)", RegexOptions.Singleline);
+            if (!sectionMatch.Success) return guids;
+
+            foreach (Match guidMatch in Regex.Matches(sectionMatch.Value, @"guid:\s*([0-9a-fA-F]+)")) {
+                guids.Add(guidMatch.Groups[1].Value);
+            }
+
+            Debug.Log($"Found {guids.Count} preloaded asset GUIDs from exported ProjectSettings");
+            return guids;
+        }
 
         private string Fix(UnityEngine.Object clone) {
             // some terrible string manipulation to fix the json, but idc it works
