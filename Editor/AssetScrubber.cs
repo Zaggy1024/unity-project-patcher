@@ -799,7 +799,14 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                         continue;
                     }
                 }
-                
+
+                if (path.EndsWith(".dll")) {
+                    var fileGuid = GetGuidFromDisk(Path.GetFullPath(path));
+                    var assemblyName = Path.GetFileNameWithoutExtension(path);
+                    entries.Add(new AssetCatalogue.AssemblyEntry(path.ToOSPath(), fileGuid, null, assemblyName, null, null));
+                    continue;
+                }
+
                 var assetType = AssetDatabase.GetMainAssetTypeAtPath(path);
                 if (assetType is null) continue;
 
@@ -1151,6 +1158,11 @@ namespace Nomnom.UnityProjectPatcher.Editor {
                         // var associatedGuids = GetAssociatedGuids(relativeFile, file, null).ToArray();
                         // var associatedFileIds = GetFileIdsFromDisk(file).ToArray();
                         entries.Add(new AssetCatalogue.ShaderEntry(relativeFile, guid, null, shaderType, null, null));
+                    }
+                        break;
+                    case ".dll" when relativeFile.StartsWith("Plugins\\") || relativeFile.StartsWith("Plugins/"): {
+                        var assemblyName = Path.GetFileNameWithoutExtension(relativeFile);
+                        entries.Add(new AssetCatalogue.AssemblyEntry(relativeFile, guid, null, assemblyName, null, null));
                     }
                         break;
                     default: {

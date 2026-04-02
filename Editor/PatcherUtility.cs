@@ -55,7 +55,8 @@ namespace Nomnom.UnityProjectPatcher.Editor {
         }
 
         public static bool ScriptsAreStubs(this IPatcherStep step) {
-            return GetAssetRipperSettings().ConfigurationData.Export.scriptExportMode != ScriptExportMode.Decompiled;
+            var mode = GetAssetRipperSettings().ConfigurationData.Export.scriptExportMode;
+            return mode != ScriptExportMode.Decompiled && mode != ScriptExportMode.Hybrid;
         }
 
         public static Type GetGameWrapperType() {

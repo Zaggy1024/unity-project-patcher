@@ -56,12 +56,17 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             var shaderEntriesProject = Entries.OfType<ShaderEntry>().ToArray();
             var shaderEntriesDisk = otherEntries.OfType<ShaderEntry>().ToArray();
 
+            var assemblyEntriesProject = Entries.OfType<AssemblyEntry>().ToArray();
+            var assemblyEntriesDisk = otherEntries.OfType<AssemblyEntry>().ToArray();
+
             var assetEntriesProject = Entries.Except(scriptEntriesProject)
-                .Except(shaderEntriesProject);
+                .Except(shaderEntriesProject)
+                .Except(assemblyEntriesProject);
                 // .GroupBy(x => x.RelativePathToRoot)
                 // .Select(x => x.First());
             var assetEntriesDisk = otherEntries.Except(scriptEntriesDisk)
-                .Except(shaderEntriesDisk);
+                .Except(shaderEntriesDisk)
+                .Except(assemblyEntriesDisk);
                 // .GroupBy(x => x.RelativePathToRoot)
                 // .Select(x => x.First());
             
@@ -96,6 +101,25 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             //
             // yield break;
             
+            // try to match assemblies (DLLs in Hybrid ScriptExportMode)
+            if (assemblyEntriesDisk.Length > 0) {
+                UnityEditor.EditorUtility.DisplayProgressBar("Comparing Catalogues", "Matching assemblies", 0);
+                stopWatch.Restart();
+                each = Parallel.ForEach(assemblyEntriesProject, a => {
+                    foreach (var b in assemblyEntriesDisk) {
+                        if (a.AssemblyName.Equals(b.AssemblyName, StringComparison.OrdinalIgnoreCase)) {
+                            found.Add(new FoundMatch(b, a));
+                            break;
+                        }
+                    }
+                });
+
+                while (!each.IsCompleted) { }
+
+                stopWatch.Stop();
+                Debug.Log($"Matching assemblies took {stopWatch.ElapsedMilliseconds}ms ({stopWatch.Elapsed.TotalSeconds}sec)");
+            }
+
             // try to match shaders
             UnityEditor.EditorUtility.DisplayProgressBar("Comparing Catalogues", "Matching shaders - This will take a while", 0);
             stopWatch.Restart();
@@ -571,6 +595,22 @@ namespace Nomnom.UnityProjectPatcher.Editor {
             
             public override string ToString(bool withTags) {
                 return $"{base.ToString(withTags)} [{FullShaderName}]";
+            }
+        }
+
+        public class AssemblyEntry : Entry {
+            public string AssemblyName;
+
+            public AssemblyEntry(string relativePathToRoot, string guid, long? fileId, string assemblyName, string[] associatedGuids, string[] fileIds) : base(null, relativePathToRoot, guid, fileId, associatedGuids, fileIds) {
+                AssemblyName = assemblyName;
+            }
+
+            public override string ToString() {
+                return ToString(true);
+            }
+
+            public override string ToString(bool withTags) {
+                return $"{base.ToString(withTags)} [Assembly: {AssemblyName}]";
             }
         }
 
