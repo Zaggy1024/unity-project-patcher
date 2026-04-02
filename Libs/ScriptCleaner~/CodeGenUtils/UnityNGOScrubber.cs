@@ -18,22 +18,42 @@ namespace Nomnom.CodeGenUtils {
             return newRoot;
         }
 
-        public static void ScrubDecompiledScript(string[] files, bool outputCopy, Action<string> log) {
-            foreach (var file in files) {
-                try {
+        private static bool IsRpcAttribute(AttributeSyntax attribute)
+        {
+            var attributeName = attribute.Name.ToString();
+            return attributeName == "ServerRpc"
+                || attributeName == "ClientRpc"
+                || attributeName == "Rpc"
+                || attributeName.EndsWith(".ServerRpc")
+                || attributeName.EndsWith(".ClientRpc")
+                || attributeName.EndsWith(".Rpc")
+                || attributeName.EndsWith("ServerRpcAttribute")
+                || attributeName.EndsWith("ClientRpcAttribute")
+                || attributeName.EndsWith("RpcAttribute");
+        }
+
+        public static void ScrubDecompiledScript(string[] files, bool outputCopy, Action<string> log)
+        {
+            foreach (var file in files)
+            {
+                try
+                {
                     // delete the copy file if it exists
                     var copyFile = file.Replace(".cs", ".copy.cs");
-                    if (File.Exists(copyFile)) {
+                    if (File.Exists(copyFile))
+                    {
                         File.Delete(copyFile);
                     }
 
-                    if (!File.Exists(file)) {
+                    if (!File.Exists(file))
+                    {
                         // log($"[error] File \"{file}\" does not exist");
                         continue;
                     }
 
                     var fileName = Path.GetFileNameWithoutExtension(file);
-                    if (fileName == "UnitySourceGeneratedAssemblyMonoScriptTypes_v1") {
+                    if (fileName == "UnitySourceGeneratedAssemblyMonoScriptTypes_v1")
+                    {
                         File.Delete(file);
                         continue;
                     }
@@ -50,34 +70,36 @@ namespace Nomnom.CodeGenUtils {
                     var bannedAttributes = new string[] {
                         "MonoPInvokeCallback"
                     };
-                    
-                    foreach (var method in methods) {
-                        if (method is MethodDeclarationSyntax methodDeclaration) {
+
+                    foreach (var method in methods)
+                    {
+                        if (method is MethodDeclarationSyntax methodDeclaration)
+                        {
                             // log($"[info] - method name: {methodDeclaration.Identifier.Text}");
                             var attributes = methodDeclaration.AttributeLists
                                 .SelectMany(x => x.Attributes)
                                 .ToArray();
 
-                            if (attributes.Any(x => bannedAttributes.Contains(x.Name.ToString()))) {
+                            if (attributes.Any(x => bannedAttributes.Contains(x.Name.ToString())))
+                            {
                                 nodesToRemove.AddRange(attributes);
                                 nodesToRemove.Add(methodDeclaration);
                                 continue;
                             }
-                            
-                            var serverRpcAttribute = attributes
-                                .FirstOrDefault(x => x.Name.ToString() == "ServerRpc");
-                            var clientRpcAttribute = attributes
-                                .FirstOrDefault(x => x.Name.ToString() == "ClientRpc");
 
                             MethodDeclarationSyntax? newMethod = null;
-                            if (serverRpcAttribute != null || clientRpcAttribute != null) {
+                            if (attributes.Any(IsRpcAttribute))
+                            {
                                 newMethod = HandleRpcFunction(methodDeclaration, log);
-                            } else {
+                            }
+                            else
+                            {
                                 // log("unknown function");
                                 continue;
                             }
 
-                            if (newMethod != null) {
+                            if (newMethod != null)
+                            {
                                 newMethod = newMethod.NormalizeWhitespace("\t", "\r\n");
                                 newMethod = (MethodDeclarationSyntax)new IndentStatements(2).Visit(newMethod);
                                 newMethod = newMethod.WithLeadingTrivia(newMethod.GetLeadingTrivia().Prepend(SyntaxFactory.CarriageReturnLineFeed));
@@ -97,7 +119,8 @@ namespace Nomnom.CodeGenUtils {
 
                     //todo: remove this from the generic code
                     var startOfRoundClass = root.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(x => x.Identifier.Text == "StartOfRound");
-                    if (startOfRoundClass != null) {
+                    if (startOfRoundClass != null)
+                    {
                         // log($"[class] {startOfRoundClass.Identifier.Text}");
                         newCode = newCode.Replace(
                             @"voiceChatModule.IsMuted = !IngamePlayerSettings.Instance.playerInput.actions.FindAction(""VoiceButton"").IsPressed() && !GameNetworkManager.Instance.localPlayerController.speakingToWalkieTalkie;",
@@ -133,7 +156,9 @@ namespace Nomnom.CodeGenUtils {
                     // write to copy file
                     File.WriteAllText(outputCopy ? copyFile : file, newCode);
                     // File.WriteAllText(file, newCode);
-                } catch (Exception e) {
+                }
+                catch (Exception e)
+                {
                     log($"[error] {e}");
                 }
             }
