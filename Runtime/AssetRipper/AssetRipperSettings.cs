@@ -31,7 +31,7 @@ namespace Nomnom.UnityProjectPatcher.AssetRipper {
         public IReadOnlyList<string> FoldersToExcludeFromRead => _foldersToExcludeFromRead.Select(x => x.Replace('/', '\\')).ToList();
         public IReadOnlyList<string> ProjectSettingFilesToCopy => _projectSettingFilesToCopy.Select(x => x.Replace('/', '\\')).ToList();
         
-        const string defaultBuildUrl = "https://github.com/Zaggy1024/AssetRipper/releases/download/1.3.9-cmd-save-dlls/Release.zip";
+        const string defaultBuildUrl = "https://github.com/Zaggy1024/AssetRipper/releases/download/1.3.12-cmd/Release.zip";
         public string BuildUrl => string.IsNullOrWhiteSpace(_customBuildUrl) ? defaultBuildUrl : _customBuildUrl;
         
         // public bool NeedsManualRip => _configurationData.Processing.enableStaticMeshSeparation;
